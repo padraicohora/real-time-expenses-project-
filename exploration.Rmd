@@ -1,0 +1,195 @@
+---
+title: "Data Cleaning"
+author: "Padraic O'Hora"
+date: "19/11/2024"
+output: pdf_document
+---
+
+``` {r include=FALSE}
+data <- read.csv("./Daily_Household_Transactions.csv")
+
+head(data)
+
+
+
+```
+
+
+``` {r}
+str(data)
+```
+
+It appears some data types are not correct. I will now change the types
+``` {r}
+length(unique(data$Mode)) # 12
+length(unique(data$Category)) #50
+length(unique(data$Subcategory)) #91
+length(unique(data$Income.Expense)) #3 
+length(unique(data$Currency)) #1
+
+data$Mode <- as.factor(data$Mode)
+data$Category <- as.factor(data$Category)
+data$Subcategory <- as.factor(data$Subcategory)
+data$Income.Expense <- as.factor(data$Income.Expense)
+
+data$Date <- parse_date_time(data$Date, orders = c("d/m/Y HMS", "d/m/Y"))
+
+
+```
+
+``` {r}
+summary(is.na(data))
+```
+
+No na values in the data set
+Next I will perform univariate analysis
+
+``` {r}
+hist(data$Amount)
+```
+
+``` {r}
+boxplot(data$Amount)
+```
+
+both charts show that the amount variable has a considerable amount of outlyer values
+
+``` {r}
+data$Amount_log <- log(data$Amount)
+hist(data$Amount_log)
+```
+
+``` {r}
+boxplot(data$Amount_log)
+```
+
+This looks better, but I would lik eto find what other variable influence the amount variable
+``` {r}
+plot(data$Amount ~ data$Income.Expense)
+```
+There is a big difference between the amounts depending on the Income.Expense Category
+
+``` {r}
+# Load the ggplot2 package
+library(ggplot2)
+
+# Create the time series plot
+ggplot(data, aes(x = Date, y = Amount)) +
+  geom_line() + 
+  labs(title = "Time Series of Amount Over Date",
+       x = "Date",
+       y = "Amount") 
+
+```
+The plot seems to show some reoccurence in pattern. 
+
+Lets create the same plot but seperate it by income.Expense
+```{r} 
+# Create the time series plot with facets for each Income.Expense category
+ggplot(data, aes(x = Date, y = Amount, col = Income.Expense)) +
+  geom_line() + 
+  facet_wrap(~ Income.Expense, ncol = 1) +  # Facet by Income.Expense
+  labs(title = "Time Series of Amount Over Date by Income/Expense",
+       x = "Date",
+       y = "Amount") 
+```
+
+The Expense and income variables show transcations throughout the timeframe. 
+Whereas the Transfer out takes place in small timeframe. This leads me to believe 
+the transfer out data is not relevean here and could be skewing some of the graphs. 
+
+First I will take a better look at the Transfer out data. 
+```{r}
+library(dplyr)
+
+transfer_out_data <- data %>%
+  filter(Income.Expense == "Transfer-Out")
+
+str(transfer_out_data)
+```
+There are 160 Transfer-Out values in the data set. 
+
+```{r}
+summary(transfer_out_data)
+```
+The amounts range from 42.88 to 250,000, with an average of 11067
+
+Next I would like to get a better idea of the proportion the Transfer-Out value has in the dataset
+```{r}
+library(gridExtra)
+
+# Calculate the total amount per Income.Expense category
+total_amount_per_category <- data %>%
+  group_by(Income.Expense) %>%
+  summarise(Total_Amount = sum(Amount))
+
+#Create the bar chart for total amount per Income.Expense category
+incomeExpenseAmountChart <-ggplot(total_amount_per_category, aes(x = Income.Expense, y = Total_Amount, fill = Income.Expense)) +
+  geom_col(stat = "identity") +
+  geom_text(aes(label = round(Total_Amount, 0)), 
+            position = position_stack(vjust = 0.5), 
+            color = "black", 
+            size = 6) +
+  labs(title = "Chart 1", subtitle = "Total Amount per Income/Expense Category",
+       x = "Income/Expense",
+       y = "Total Amount") +
+  coord_flip()
+
+  # Create a new column Is_Income
+fundsIn_amount_chart <- data %>%
+  mutate(FundsIn = Income.Expense == "Income") %>%
+  group_by(Income.Expense, FundsIn) %>%
+  summarise(Total_Amount = sum(Amount), )
+
+  # Create the bar chart for Is_Income
+incomeExpenseIsIncomeChart <- ggplot(fundsIn_amount_chart, aes(x = FundsIn, y = Total_Amount, fill = Income.Expense)) +
+  geom_col(stat = "identity") +
+    geom_text(aes(label = round(Total_Amount, 0)), 
+            position = position_stack(vjust = 0.5), 
+            color = "black", 
+            size = 6) +
+  labs(title = "Chart 2", subtitle = "Total Amount of funds in and out per Income/Expense Category",
+       x = "Funds in and out",
+       y = "Count")+
+  coord_flip() 
+
+percentage_per_category <- data %>%
+  group_by(Income.Expense) %>%
+  summarise(Count = n()) %>%
+  mutate(Percentage = (Count / sum(Count)) * 100)
+
+# # Create the pie chart for percentage of each Income.Expense type
+incomeExpensePercentageChart <- ggplot(percentage_per_category, aes(x = Income.Expense, y = Percentage, fill = Income.Expense)) +
+  geom_col(stat = "identity") +
+  geom_text(aes(label = paste0(round(Percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5), 
+            color = "black", 
+            size = 5) +
+  labs(title = "Chart 3", subtitle = "Percentage of Income/Expense Types in Dataset",
+       x = "Income/Expense",
+       y = "Percentage (%)")+
+  coord_flip() 
+
+
+
+# # Combine the plots
+grid.arrange(incomeExpenseAmountChart, incomeExpenseIsIncomeChart, incomeExpensePercentageChart, nrow = 3)
+
+```
+The above chart shows two bar charts
+
+
+
+```{r}
+percentage_per_category <- data %>%
+  group_by(Income.Expense) %>%
+  summarise(Count = n()) %>%
+  mutate(Percentage = (Count / sum(Count)) * 100)
+
+# Create the bar chart for percentage of each Income.Expense type
+ggplot(percentage_per_category, aes(x = Income.Expense, y = Percentage, fill = Income.Expense)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Income/Expense Types in Dataset",
+       x = "Income/Expense",
+       y = "Percentage (%)") 
+```
