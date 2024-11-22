@@ -4,23 +4,39 @@ author: "Padraic O'Hora"
 date: "19/11/2024"
 output: pdf_document
 ---
+```{r}
+# install.packages("treemap")
+```
 
-``` {r include=FALSE}
+# Setup
+```{r include=FALSE}
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(gridExtra)
+library(treemap)
+```
+
+
+# data exploration
+```{r include=FALSE}
+
 data <- read.csv("./Daily_Household_Transactions.csv")
 
 head(data)
-
-
-
 ```
 
-
-``` {r}
+```{r}
 str(data)
 ```
 
+
+```{r}
+summary(data)
+```
+
 It appears some data types are not correct. I will now change the types
-``` {r}
+```{r}
 length(unique(data$Mode)) # 12
 length(unique(data$Category)) #50
 length(unique(data$Subcategory)) #91
@@ -37,53 +53,226 @@ data$Date <- parse_date_time(data$Date, orders = c("d/m/Y HMS", "d/m/Y"))
 
 ```
 
-``` {r}
+```{r}
 summary(is.na(data))
 ```
 
 No na values in the data set
 Next I will perform univariate analysis
 
+### Exploration of Amount
 ``` {r}
+summary(data$Amount)
+```
+Median Amount is 100, whereas mean is 2751, suggesting a heavily squewed distribution. 
+Max amount is 250000 and min amount is 2
+q1 is 35, q3 is 799
+IQR is 764
+
+# Univariate Charts
+
+## Amount
+
+### Amount Histogram and boxplot
+```{r}
 hist(data$Amount)
 ```
-
 ``` {r}
 boxplot(data$Amount)
 ```
+#### Chart analysis
+both charts show that the amount variable has a considerable amount of outlyer values and is has a long tail over higher values
 
-both charts show that the amount variable has a considerable amount of outlyer values
-
-``` {r}
+### Log of Amount Histogram and boxplot
+```{r}
 data$Amount_log <- log(data$Amount)
 hist(data$Amount_log)
 ```
 
-``` {r}
+```{r}
 boxplot(data$Amount_log)
 ```
+#### Chart analysis
+Using logorythmic scale of the amout variable give a normal distribution 
 
-This looks better, but I would lik eto find what other variable influence the amount variable
+## Income.Expense 
+
+### Income.Expense Bar chart
+```{r}
+income_expense_count <- data %>%
+  group_by(Income.Expense) %>%
+  summarise(Count = n())
+
+ggplot(income_expense_count, aes(x = Income.Expense, y = Count, fill = Income.Expense)) +
+  geom_col() +
+  geom_text(aes(label = Count), 
+            position = position_stack(vjust = 0.5), 
+            color = "black", 
+            size = 6) +
+  labs(title = "Number of Transactions per Income.Expense Category",
+       x = "Income.Expense",
+       y = "Number of Transactions") 
+
+```
+```{r}
+# stacked_bar_plot <- data %>%
+#   group_by(Income.Expense, Category) %>%
+#   summarise(Count = n()) %>%
+#   ggplot(aes(x = Income.Expense, y = Count, fill = Category, col="black")) +
+#   geom_col() +
+#   labs(title = "Stacked Bar Plot of Transactions per Income/Expense and Category",
+#        x = "Income/Expense",
+#        y = "Number of Transactions") +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels to 45 degrees
+#         plot.title = element_text(hjust = 0.5))
+
+# stacked_bar_plot
+# Create faceted bar plots by Year
+# facet_bar_plot <- data %>%
+#   ggplot(aes(x = Income.Expense, fill = Income.Expense)) +
+#   geom_bar() +
+#   facet_wrap(~ Year, ncol = 1) +
+#   labs(title = "Faceted Bar Plot of Transactions per Income/Expense by Year",
+#        x = "Income/Expense",
+#        y = "Number of Transactions") +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels to 45 degrees
+#         plot.title = element_text(hjust = 0.5))
+
+# facet_bar_plot
+
+```
+#### Chart analysis
+Chart shows thhe three subtypes of Income.Expense, Income, Expense and Transfer-out
+The dataset consists mostly of Expense observations, with 2000+ entries compared to 
+100+ for both income and Transer-out
+
+## Category
+### Category Area Chart
+```{r}
+category_expense_count <- data %>%
+  group_by(Category) %>%
+  summarise(Count = n())
+
+treemap(category_expense_count,
+          index="Category",
+          vSize="Count",
+          type="index"
+          )
+
+```
+#### Chart analysis
+Chart shows there are many categories in the dataset. The most common category is 
+Food, followed by Transportation, Household and Subscription.
+
+## Mode
+### Mode Bar Chart
+```{r}
+mode_expense_count <- data %>%
+  group_by(Mode) %>%
+  summarise(Count = n())
+
+ggplot(mode_expense_count, aes(x = Mode, y = Count, fill = Mode)) +
+  geom_col() +
+  geom_text(aes(label = Count), 
+            position = position_stack(vjust = 0.5), 
+            color = "black", 
+            size = 6) +
+  labs(title = "Number of Transactions per Mode Category",
+       x = "Mode",
+       y = "Number of Transactions") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+```
+#### Chart analysis
+Chart shows there are two main Modes of transaction. Savings bank account 1, and Savings bank account 2, follewed by Credit Card
+
+## Subcategory
+
+**There are over 635 Subcategories, charting this variable wil not be helpful**
+
+
+## Note
+
+**Notes are sentences about the transaction, no charts**
+
+
+# Bivariate Charts
+### Amount by Income.Expense Boxplot
+This will explore the amount and Income.Expense variable in a box plot
 ``` {r}
 plot(data$Amount ~ data$Income.Expense)
 ```
-There is a big difference between the amounts depending on the Income.Expense Category
+#### Chart analysis
+There is a big difference between the amounts acorss the Income.Expense variable. 
+Expense and Transfer-Out have on average small amounts, but also have several outlier values. 
+Income has no outlier values but has a long tail, suggesting there is variety of amounts that 
+are greater than the average, but on average the amount is small  
+
+### Amount by Income only exploration
+This will explore the Amount and Income category variable in a histogram
+```{r}
+income_amounts <- data %>% filter(Income.Expense == "Income")
+summary(income_amounts$Amount)
+```
+Min is 2, and Max is 113376 
+Q1 is 25, Q3 is 51562
+Median is 2000 
+Mean is 24339
+there is considerable variance in the dat
+
+### Amount by Income only Histogram
+This will explore the Amount and Income category variable in a histogram
+``` {r}
+ggplot(income_amounts, aes(x = Amount)) +
+  geom_histogram() + 
+  labs(title = "Amount by Income Histogram",
+       x = "Amount",
+       y = "Count") 
+```
+#### Chart analysis
+histogram is somewhat squewed showing two groups of income and one very lagre concentration at the start. 
+The groups I can see is:
+- small which are less than the median value of 2,000
+- medium is between 2,000 and 10,000 
+- large which are between 45,000 and 75,000
+
+### Exploration of Amount groups
+This will explore the two groups of income in histogram 
 
 ``` {r}
-# Load the ggplot2 package
-library(ggplot2)
+small_income_amounts <- income_amounts %>% filter(Amount <= 2000)
 
-# Create the time series plot
-ggplot(data, aes(x = Date, y = Amount)) +
-  geom_line() + 
-  labs(title = "Time Series of Amount Over Date",
-       x = "Date",
-       y = "Amount") 
-
+ggplot(small_income_amounts, aes(x = Amount)) +
+  geom_histogram() + 
+  labs(title = "Amount by Income Histogram",
+       x = "Amount",
+       y = "Count") 
 ```
-The plot seems to show some reoccurence in pattern. 
 
-Lets create the same plot but seperate it by income.Expense
+``` {r}
+medium_income_amounts <- income_amounts %>% filter((Amount > 2000) & (Amount < 10000))
+
+ggplot(medium_income_amounts, aes(x = Amount)) +
+  geom_histogram() + 
+  labs(title = "Amount by Income Histogram",
+       x = "Amount",
+       y = "Count") 
+```
+
+``` {r}
+
+large_income_amounts <- income_amounts %>% filter((Amount > 45000) & (Amount < 75000))
+
+ggplot(large_income_amounts, aes(x = Amount)) +
+  geom_histogram() + 
+  labs(title = "Amount by Income Histogram",
+       x = "Amount",
+       y = "Count") 
+```
+#### Chart analysis
+These dont provide any insights
+
+### Timeseries of Amount groups seperated by Income.Expense
+This will chart amount and Income.Expense across the Date variable
 ```{r} 
 # Create the time series plot with facets for each Income.Expense category
 ggplot(data, aes(x = Date, y = Amount, col = Income.Expense)) +
@@ -94,14 +283,161 @@ ggplot(data, aes(x = Date, y = Amount, col = Income.Expense)) +
        y = "Amount") 
 ```
 
-The Expense and income variables show transcations throughout the timeframe. 
-Whereas the Transfer out takes place in small timeframe. This leads me to believe 
-the transfer out data is not relevean here and could be skewing some of the graphs. 
+#### Chart analysis
+The chart shows the amount of Income, Expense and Transfer-Out over time. Starting at 2015 up unitl the end of 2018
+- The Expense group (red) has steady small amounts show regular pattern
+- The Income group (green) goes up and down frequently. It rarly goes above 5000, but also seems to drop very low
+- The Transfer-Out group seems to have a shorter range of amounts, starting in 2017. This sub type has some very 
+ small amounts, and included some huge spikes in amounts
+
+### Timeseries of Amount comparing Income and Expense
+This will chart Income and Expense subtypes acorss the Date variable
+```{r} 
+income_and_expense_amounts <- data %>% filter(Income.Expense != "Transfer-Out")
+
+# Create the time series plot with facets for each Income.Expense category
+ggplot(income_and_expense_amounts, aes(x = Date, y = Amount, col = Income.Expense)) +
+  geom_point() +
+  geom_line() + 
+  labs(title = "Time Series of Amount Over Date by Income/Expense",
+       x = "Date",
+       y = "Amount") 
+```
+
+#### Chart analysis
+The chart shows the amount of Income and Expense and Transfer-Out over time. 
+- Income is larger amount and less regular
+- Expense is generally smaller amount and more regular
+
+### Monthly Sum of Amount comparing Income.Expense
+```{r}
+# Create a new column for month-year
+data$MonthYear <- format(data$Date, "%Y-%m")
+data$Month <- format(data$Date, "%m")
+data$Year <- format(data$Date, "%Y")
+head(data)
+```
+
+```{r} 
+# Create a new column for month-year
+data$MonthYear <- format(data$Date, "%Y-%m")
+data$Month <- format(data$Date, "%m")
+data$Year <- format(data$Date, "%Y")
+
+# Count the number of income transactions per month
+income_freq <- data %>%
+  group_by(MonthYear, Year, Income.Expense) %>%
+  summarise(TotalAmount = sum(Amount))
+
+head(income_freq)
+# Plot the frequency of income transactions per month
+ggplot(income_freq, aes(x = MonthYear, y = TotalAmount,col = Year, group = Income.Expense)) +
+  geom_point() + 
+   geom_line() + 
+  facet_wrap(~ Income.Expense, ncol = 1) +
+  labs(title = "Frequency of Income Transactions per Month",
+       x = "Month-Year",
+       y = "Number of Income Transactions") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+#### Chart analysis
+The month shows a general constant line in Income. 
+Expense has a less uniform line
+
+### Quarterly Sum of Amount comparing Income.Expense
+```{r} 
+# Create a new column for month-year
+data$Season <- quarter(data$Date , with_year = FALSE)
+data$SeasonYear <- quarter(data$Date , with_year = TRUE)
+
+# Count the number of income transactions per month
+season_income_freq <- data %>%
+  group_by(SeasonYear, Year, Income.Expense) %>%
+  summarise(TotalAmount = sum(Amount))
+
+head(season_income_freq)
+# Plot the frequency of income transactions per month
+ggplot(season_income_freq, aes(x = SeasonYear, y = TotalAmount,col = Year, group = Income.Expense)) +
+  geom_point() + 
+   geom_line() + 
+  facet_wrap(~ Income.Expense, ncol = 1) +
+  labs(title = "Frequency of Income Transactions per Month",
+       x = "Month-Year",
+       y = "Number of Income Transactions") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+#### Chart analysis
+The month shows a general constant line in Income. 
+Expense has a less uniform line
+
+### Weekly Sum of Amount comparing Income.Expense acorss years
+```{r} 
+# Create weekly variable
+data$Week <- week(data$Date)
+
+# Combine year and week 
+data$WeekYear <- paste0(format(data$Date, "%Y"), "-", sprintf("%02d", data$Week))
+
+# Count the number of income transactions per week
+week_income_freq <- data %>%
+  group_by(WeekYear, Year, Season, Month, Income.Expense) %>%
+  summarise(TotalAmount = sum(Amount))
+
+head(week_income_freq)
+# Plot the frequency of income transactions per week
+ggplot(week_income_freq, aes(x = WeekYear, y = TotalAmount,col = Year, group = Income.Expense)) +
+  geom_point() + 
+   geom_line() + 
+  facet_wrap(~ Income.Expense, ncol = 1) +
+  labs(title = "Frequency of Income Transactions per Week",
+       x = "week-Year",
+       y = "Number of Income Transactions") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_x_discrete(breaks = week_income_freq$WeekYear[seq(1, nrow(week_income_freq), by = 12)])
+```
+#### Chart analysis
+The chart shows the **weekly sum of amounts** of Income and Expense and Transfer-Out over time. 
+- Expense is generally smaller amount and more regular
+- Income is larger amount and less regular
+- Transfer-Out is over a shorter period and is composed of small and large amounts
+- Both Expense and Income is stationary
+
+### Same chart acorss seasons
+```{r} 
+# Plot the frequency of income transactions per week
+ggplot(week_income_freq, aes(x = WeekYear, y = TotalAmount,col = Season, group = Income.Expense)) +
+  geom_point() + 
+   geom_line() + 
+  facet_wrap(~ Income.Expense, ncol = 1) +
+  labs(title = "Frequency of Income Transactions per Week",
+       x = "week-Year",
+       y = "Number of Income Transactions") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_x_discrete(breaks = week_income_freq$WeekYear[seq(1, nrow(week_income_freq), by = 12)])
+```
+#### Chart analysis
+These dont provide any insights
+
+### Same chart acorss months
+```{r} 
+# Plot the frequency of income transactions per month
+ggplot(week_income_freq, aes(x = WeekYear, y = TotalAmount,col = Month, group = Income.Expense)) +
+  geom_point() + 
+   geom_line() + 
+  facet_wrap(~ Income.Expense, ncol = 1) +
+  labs(title = "Frequency of Income Transactions per Week",
+       x = "week-Year",
+       y = "Number of Income Transactions") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_x_discrete(breaks = week_income_freq$WeekYear[seq(1, nrow(week_income_freq), by = 12)])
+```
+#### Chart analysis
+In both the Expense and income charts there appears to be a spike in amount in the months around the end of the year and January
+
+
 
 First I will take a better look at the Transfer out data. 
 ```{r}
-library(dplyr)
-
 transfer_out_data <- data %>%
   filter(Income.Expense == "Transfer-Out")
 
@@ -116,8 +452,6 @@ The amounts range from 42.88 to 250,000, with an average of 11067
 
 Next I would like to get a better idea of the proportion the Transfer-Out value has in the dataset
 ```{r}
-library(gridExtra)
-
 # Calculate the total amount per Income.Expense category
 total_amount_per_category <- data %>%
   group_by(Income.Expense) %>%
@@ -176,20 +510,83 @@ incomeExpensePercentageChart <- ggplot(percentage_per_category, aes(x = Income.E
 grid.arrange(incomeExpenseAmountChart, incomeExpenseIsIncomeChart, incomeExpensePercentageChart, nrow = 3)
 
 ```
-The above chart shows two bar charts
+
+#### Chart analysis 
+
+The above charts show three different horizontal Charts
+ - Chart 1 shows that the sum of all income is the largest when compared against Expense and transfer-out. 
+ - Chart 2 shows that the combined sums of Expense and transfer-out is larger than income, suggesting the 
+ person is spending more than they are making. 
+ - Chart 3 shows the total percentage of rows in the table per Income.Expense variable
+
+### Categories across Income.Expense
+Next I will explore the Categories across Income.Expense Varibale to get a better understanding of the Income.Expenses
+```{r}
+# Summarize the total amount per Category
+category_amount_summary <- data %>%
+  group_by(Category, Income.Expense) %>%
+  summarise(Total_Amount = sum(Amount), .groups = 'drop') %>%
+  select(Total_Amount, Income.Expense, Category) %>%
+  arrange(desc(Total_Amount))
+
+expenseCategoryAmount <- ggplot(category_amount_summary %>%
+  filter(Income.Expense == "Expense"), aes(x = Category, y = Total_Amount, fill = Category)) +
+  geom_col() +
+  labs(title = "Chart X", subtitle = "Expenses Total Amount per Category",
+       x = "Category",
+       y = "Total Amount") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels to 45 degrees
+    plot.title = element_text(hjust = 0.5)
+  )
+
+incomeCategoryAmount <- ggplot(category_amount_summary %>%
+  filter(Income.Expense == "Income"), aes(x = Category, y = Total_Amount, fill = Category)) +
+  geom_col() +
+  labs(title = "Chart X", subtitle = "Income Total Amount per Category",
+       x = "Category",
+       y = "Total Amount") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels to 45 degrees
+    plot.title = element_text(hjust = 0.5)
+  )
+
+transferOutCategoryAmount <- ggplot(category_amount_summary %>%
+  filter(Income.Expense == "Transfer-Out"), aes(x = Category, y = Total_Amount, fill = Category)) +
+  geom_col() +
+  labs(title = "Chart X", subtitle = "Transfer-Out Total Amount per Category",
+       x = "Category",
+       y = "Total Amount") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels to 45 degrees
+    plot.title = element_text(hjust = 0.5)
+  )
+
+grid.arrange(expenseCategoryAmount, incomeCategoryAmount, transferOutCategoryAmount, nrow = 3)
+```
+
+#### Chart analysis 
+The large spike in the Income salary category apart that is Income.Expense is the largest amount
 
 
 
 ```{r}
-percentage_per_category <- data %>%
-  group_by(Income.Expense) %>%
-  summarise(Count = n()) %>%
-  mutate(Percentage = (Count / sum(Count)) * 100)
+category_amount_summary <- data %>%
+  group_by(Category, Income.Expense) %>%
+  summarise(Total_Amount = sum(Amount), .groups = 'drop') %>%
+  select(Total_Amount, Income.Expense, Category) %>%
+  arrange(desc(Total_Amount))
 
-# Create the bar chart for percentage of each Income.Expense type
-ggplot(percentage_per_category, aes(x = Income.Expense, y = Percentage, fill = Income.Expense)) +
-  geom_bar(stat = "identity") +
-  labs(title = "Percentage of Income/Expense Types in Dataset",
-       x = "Income/Expense",
-       y = "Percentage (%)") 
+print(category_amount_summary)
+
+ggplot(category_amount_summary, aes(x = Category, y = Total_Amount, fill = Income.Expense)) +
+  geom_col() +
+   facet_wrap(~ Income.Expense, ncol = 1) +
+  labs(title = "Chart X", subtitle = "Total Amount per Category across Income.Expense",
+       x = "Category",
+       y = "Total Amount") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels to 45 degrees
+    plot.title = element_text(hjust = 0.5)
+  )
 ```
