@@ -48,7 +48,7 @@ data$Category <- as.factor(data$Category)
 data$Subcategory <- as.factor(data$Subcategory)
 data$Income.Expense <- as.factor(data$Income.Expense)
 
-data$Date <- parse_date_time(data$Date, orders = c("d/m/Y HMS", "d/m/Y"))
+data$Date <- parse_date_time(data$Date, orders = c("d/m/Y H:M:S", "d/m/Y"))
 
 
 ```
@@ -196,6 +196,77 @@ Chart shows there are two main Modes of transaction. Savings bank account 1, and
 
 
 # Bivariate Charts
+
+## Amount and Date
+```{r}
+data %>% ggplot( aes(x=Date, y=Amount)) +
+    geom_line() +
+    # annotate(geom="text", x=as.Date("2017-01-01"), y=20089, 
+    #          label="Bitcoin price reached 20k $\nat the end of 2017") +
+    # annotate(geom="point", x=as.Date("2017-12-17"), y=20089, size=10, shape=21, fill="transparent") +
+    geom_hline(yintercept=mean(data$Amount), color="orange", size=.5)
+```
+
+```{r}
+# Calculate the mean of Amount for each Income.Expense group
+mean_data <- data %>%
+  group_by(Income.Expense) %>%
+  summarise(mean_amount = mean(Amount))
+ggplot(data, aes(x = Date, y = Amount, col = Income.Expense)) +
+  geom_line() + 
+  facet_wrap(~ Income.Expense, ncol = 1) +  # Facet by Income.Expense
+  geom_hline(data = mean_data, aes(yintercept = mean_amount, color = Income.Expense), size = .5) +
+  labs(title = "Time Series of Amount Over Date by Income/Expense",
+       x = "Date",
+       y = "Amount") 
+```
+
+## Amount and Mode
+```{r}
+summary_data_1 <- data %>%
+  group_by(Mode) %>%
+  summarise(total_amount_sum = sum(Amount)) %>%
+  arrange(total_amount_sum)
+
+summary_data$Mode <- factor(summary_data$Mode, levels = summary_data$Mode)
+
+chart_1 <- summary_data %>% ggplot(aes(x = Mode, y = total_amount_sum, col = Mode, fill=Mode)) +
+  geom_bar(stat="identity", alpha=.6, width=.4) +
+  coord_flip() +
+  labs(title = "Total Amount by Mode",
+       x = "Mode",
+       y = "Total Amount") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+summary_data_2 <- data %>%
+  group_by(Mode) %>%
+  summarise(total_amount_count = n()) %>%
+  arrange(total_amount_count)
+summary_data$Mode <- factor(summary_data_2$Mode, levels = summary_data_2$Mode)
+
+chart_2 <-summary_data_2 %>% ggplot(aes(x = Mode, y = total_amount_count, col = Mode, fill=Mode)) +
+  geom_bar(stat="identity", alpha=.6, width=.4) +
+  coord_flip() +
+  labs(title = "Count of Amount by Mode",
+       x = "Mode",
+       y = "Count Amount") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+grid.arrange(chart_1, chart_2,nrow = 2)
+
+```
+#### Chart analysis
+Chart shows Savings bank account has the highest largest sum of Amount Transactions
+
+PICK up HERE
+
+
+## Amount and Category
+
+## Amount and Subcategory
+
+## Amount and Income.Expense
+
 ### Amount by Income.Expense Boxplot
 This will explore the amount and Income.Expense variable in a box plot
 ``` {r}
@@ -270,6 +341,9 @@ ggplot(large_income_amounts, aes(x = Amount)) +
 ```
 #### Chart analysis
 These dont provide any insights
+
+
+# Multi-variate Charts
 
 ### Timeseries of Amount groups seperated by Income.Expense
 This will chart amount and Income.Expense across the Date variable
@@ -434,8 +508,7 @@ ggplot(week_income_freq, aes(x = WeekYear, y = TotalAmount,col = Month, group = 
 #### Chart analysis
 In both the Expense and income charts there appears to be a spike in amount in the months around the end of the year and January
 
-
-
+### Further Exploration of Income.Expense data
 First I will take a better look at the Transfer out data. 
 ```{r}
 transfer_out_data <- data %>%
@@ -450,6 +523,7 @@ summary(transfer_out_data)
 ```
 The amounts range from 42.88 to 250,000, with an average of 11067
 
+### Comparison of Income.Expense distributions 
 Next I would like to get a better idea of the proportion the Transfer-Out value has in the dataset
 ```{r}
 # Calculate the total amount per Income.Expense category
@@ -512,12 +586,13 @@ grid.arrange(incomeExpenseAmountChart, incomeExpenseIsIncomeChart, incomeExpense
 ```
 
 #### Chart analysis 
-
 The above charts show three different horizontal Charts
  - Chart 1 shows that the sum of all income is the largest when compared against Expense and transfer-out. 
  - Chart 2 shows that the combined sums of Expense and transfer-out is larger than income, suggesting the 
  person is spending more than they are making. 
  - Chart 3 shows the total percentage of rows in the table per Income.Expense variable
+
+## Categories and Income.Expense
 
 ### Categories across Income.Expense
 Next I will explore the Categories across Income.Expense Varibale to get a better understanding of the Income.Expenses
