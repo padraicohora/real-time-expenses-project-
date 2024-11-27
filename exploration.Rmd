@@ -5,7 +5,16 @@ date: "19/11/2024"
 output: pdf_document
 ---
 ```{r}
-# install.packages("treemap")
+if (!requireNamespace("gridExtra", quietly = TRUE)) {
+  install.packages("gridExtra")
+}
+if (!requireNamespace("treemap", quietly = TRUE)) {
+  install.packages("treemap")
+}
+
+if (!requireNamespace("waffle", quietly = TRUE)) {
+  install.packages("waffle")
+}
 ```
 
 # Setup
@@ -15,6 +24,7 @@ library(lubridate)
 library(ggplot2)
 library(gridExtra)
 library(treemap)
+library(waffle)
 ```
 
 
@@ -223,49 +233,80 @@ ggplot(data, aes(x = Date, y = Amount, col = Income.Expense)) +
 
 ## Amount and Mode
 ```{r}
-summary_data_1 <- data %>%
+mode_data_total <- data %>%
   group_by(Mode) %>%
   summarise(total_amount_sum = sum(Amount)) %>%
   arrange(total_amount_sum)
 
-summary_data$Mode <- factor(summary_data$Mode, levels = summary_data$Mode)
+mode_data_count <- data %>%
+  group_by(Mode) %>%
+  summarise(total_amount_count = n()) %>%
+  arrange(total_amount_count)
 
-chart_1 <- summary_data %>% ggplot(aes(x = Mode, y = total_amount_sum, col = Mode, fill=Mode)) +
+mode_data_total$Mode <- factor(mode_data_total$Mode, levels = mode_data_total$Mode)
+mode_data_count$Mode <- factor(mode_data_count$Mode, levels = mode_data_total$Mode)
+
+chart_1 <- mode_data_total %>% ggplot(aes(x = Mode, y = total_amount_sum, col = Mode, fill=Mode)) +
   geom_bar(stat="identity", alpha=.6, width=.4) +
   coord_flip() +
   labs(title = "Total Amount by Mode",
        x = "Mode",
        y = "Total Amount") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),legend.position = "none")
 
-summary_data_2 <- data %>%
-  group_by(Mode) %>%
-  summarise(total_amount_count = n()) %>%
-  arrange(total_amount_count)
-summary_data$Mode <- factor(summary_data_2$Mode, levels = summary_data_2$Mode)
-
-chart_2 <-summary_data_2 %>% ggplot(aes(x = Mode, y = total_amount_count, col = Mode, fill=Mode)) +
+chart_2 <-mode_data_count %>% ggplot(aes(x = Mode, y = total_amount_count, col = Mode, fill=Mode)) +
   geom_bar(stat="identity", alpha=.6, width=.4) +
   coord_flip() +
   labs(title = "Count of Amount by Mode",
        x = "Mode",
        y = "Count Amount") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),legend.position = "none")
 
-grid.arrange(chart_1, chart_2,nrow = 2)
+grid.arrange(chart_1, chart_2,ncol = 2)
 
 ```
 #### Chart analysis
-Chart shows Savings bank account has the highest largest sum of Amount Transactions
-
-PICK up HERE
+Chart shows Savings bank account has the highest largest sum of Amount Transactions, it also has the most transactions
+Cash followed by credit card also have a high amount of transactions, 
 
 
 ## Amount and Category
+```{r}
+category_data_total <- data %>%
+  group_by(Category) %>%
+  summarise(total_amount_sum = sum(Amount)) %>%
+  arrange(total_amount_sum)
 
+category_data_count <- data %>%
+  group_by(Category) %>%
+  summarise(total_amount_count = n()) %>%
+  arrange(total_amount_count)
+
+category_data_total$Category <- factor(category_data_total$Category, levels = category_data_total$Category)
+category_data_count$Category <- factor(category_data_count$Category, levels = category_data_total$Category)
+
+
+chart_1 <- category_data_total %>% ggplot(aes(x = Category, y = total_amount_sum, col = Category, fill=Category)) +
+  geom_bar(stat="identity", alpha=.6, width=.4) +
+  coord_flip() +
+  labs(title = "Total Amount by Category",
+       x = "Category",
+       y = "Total Amount") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),legend.position = "none")
+
+chart_2 <-category_data_count %>% ggplot(aes(x = Category, y = total_amount_count, col = Category, fill=Category)) +
+  geom_bar(stat="identity", alpha=.6, width=.4) +
+  coord_flip() +
+  labs(title = "Count of Amount by Category",
+       x = "Category",
+       y = "Count Amount") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),legend.position = "none")
+
+grid.arrange(chart_1, chart_2,ncol = 2 )
+```
 ## Amount and Subcategory
 
-## Amount and Income.Expense
+
 
 ### Amount by Income.Expense Boxplot
 This will explore the amount and Income.Expense variable in a box plot
@@ -643,25 +684,142 @@ grid.arrange(expenseCategoryAmount, incomeCategoryAmount, transferOutCategoryAmo
 #### Chart analysis 
 The large spike in the Income salary category apart that is Income.Expense is the largest amount
 
-
-
+### Check if categories overlap
 ```{r}
-category_amount_summary <- data %>%
-  group_by(Category, Income.Expense) %>%
-  summarise(Total_Amount = sum(Amount), .groups = 'drop') %>%
-  select(Total_Amount, Income.Expense, Category) %>%
-  arrange(desc(Total_Amount))
 
-print(category_amount_summary)
-
-ggplot(category_amount_summary, aes(x = Category, y = Total_Amount, fill = Income.Expense)) +
-  geom_col() +
-   facet_wrap(~ Income.Expense, ncol = 1) +
-  labs(title = "Chart X", subtitle = "Total Amount per Category across Income.Expense",
-       x = "Category",
-       y = "Total Amount") +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels to 45 degrees
-    plot.title = element_text(hjust = 0.5)
-  )
+data %>%
+  group_by(Category) %>%
+  summarise(Unique_Income_Expense = n_distinct(Income.Expense)) %>%
+  filter(Unique_Income_Expense > 1)
 ```
+
+There is some overlap of categories across income.expense types:
+-   Other, in 2 categories
+-   Public Provident Fund, in 2 categories
+-   Recurring Deposit, in 2 categories
+
+### Timeseries of Amount in Income comparing acorss categories
+```{r}
+
+# Count the number of income transactions per month
+income_catergoy_freq <- data %>%
+  filter(Income.Expense == "Income") %>%
+  group_by(Category, MonthYear, Year) %>%
+  summarise(TotalAmount = sum(Amount))
+
+# Plot the frequency of income transactions per month
+ggplot(income_catergoy_freq, aes(x = MonthYear, y = TotalAmount,col = Year, group = Category)) +
+  geom_point() + 
+   geom_line() + 
+  facet_wrap(~ Category, ncol = 1) +
+  labs(title = "Frequency of Income Transactions acorss Categories per Month",
+       x = "Month-Year",
+       y = "Number of Income Transactions") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+#### Chart analysis 
+Salary is the only Catergoy of Income that spans most of the duration of the dataset.
+This also has seasonal dimension with regalar monthly amount, a slight trend upwards and very little variance
+**will look at sub categories of salary category in further detail**
+
+### Timeseries of Amount of salary acorss years
+```{r}
+
+income_salary_freq <- data %>%
+  filter(Income.Expense == "Income" & Category == "Salary") %>%
+  group_by(Month, Year) %>%
+  summarise(TotalAmount = sum(Amount))
+
+
+ggplot(income_salary_freq, aes(x = Month, y = TotalAmount, color = factor(Year), group = factor(Year))) +
+  geom_point() + 
+  geom_line() + 
+  facet_wrap(~ Year, ncol = 1) +
+  labs(title = "Yearly Salary Transactions Per Month",
+       x = "Month",
+       y = "Salary Transactions Amount",
+       color = "Year") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+#### Chart analysis 
+
+### Timeseries of Amount of salary acorss years
+```{r}
+
+income_salary_freq <- data %>%
+  filter(Income.Expense == "Expense") %>%
+  group_by(Month, Year) %>%
+  summarise(TotalAmount = sum(Amount))
+
+
+ggplot(income_salary_freq, aes(x = Month, y = TotalAmount, color = factor(Year), group = factor(Year))) +
+  geom_point() + 
+  geom_line() + 
+  facet_wrap(~ Year, ncol = 1) +
+  labs(title = "Yearly Expense Transactions Per Month",
+       x = "Month",
+       y = "Number of Expense Transactions",
+       color = "Year") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+### Timeseries of Amount Aalary comparing acorss subcategories
+```{r}
+salary_subcategory_freq <- data %>%
+  filter(Category == "Salary") %>%
+  group_by(Subcategory, MonthYear, Year) %>%
+  summarise(TotalAmount = sum(Amount))
+
+print(any(salary_subcategory_freq$Subcategory != ""))
+```
+
+#### analysis 
+Salary has no sub categories
+
+### Timeseries of Amount in Expense comparing acorss categories
+```{r}
+
+# Count the number of expense transactions per week
+expense_catergoy_freq <- data %>%
+  filter(Income.Expense == "Expense") %>%
+  
+  group_by(Category, WeekYear, Year) %>%
+  summarise(TotalAmount = sum(Amount))
+
+head(income_freq)
+# Plot the frequency of expense transactions per week
+ggplot(expense_catergoy_freq, aes(x = WeekYear, y = TotalAmount,col = Year, group = Category)) +
+  geom_point() + 
+   geom_line() + 
+  facet_wrap(~ Category, ncol = 1) +
+  labs(title = "Frequency of Expense Transactions acorss Categories per Week",
+       x = "Week-Year",
+       y = "Number of Income Transactions") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+#### Chart analysis 
+Unlike Income, the Expense type has there are many Categories that have transactions throughout the year. 
+
+### Analysis of Expense Categories and subcategories
+```{r}
+
+# Count the number of expense transactions per week
+expense_catergoy_freq <- data %>%
+  filter((Income.Expense == "Expense") & (Subcategory != "")) %>%
+  group_by(Category, Subcategory) %>%
+  summarise(TotalAmount = sum(Amount))
+
+head(expense_catergoy_freq)
+
+ggplot(expense_catergoy_freq, aes(x = Category, y = TotalAmount, fill = Subcategory)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total Expense Amount by Category and Subcategory",
+       x = "Category",
+       y = "Total Amount",
+       fill = "Subcategory") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
