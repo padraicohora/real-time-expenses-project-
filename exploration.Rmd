@@ -25,6 +25,8 @@ library(ggplot2)
 library(gridExtra)
 library(treemap)
 library(waffle)
+library(forecast)
+library(caret)
 ```
 
 
@@ -58,6 +60,10 @@ data$Category <- as.factor(data$Category)
 data$Subcategory <- as.factor(data$Subcategory)
 data$Income.Expense <- as.factor(data$Income.Expense)
 
+# Mutate the Subcategory column to fill empty strings with Category + " unknown"
+data <- data %>%
+  mutate(Subcategory = ifelse(Subcategory == "", paste(Category, "unknown"), paste(Subcategory)))
+
 data$Date <- parse_date_time(data$Date, orders = c("d/m/Y H:M:S", "d/m/Y"))
 
 
@@ -68,6 +74,49 @@ summary(is.na(data))
 ```
 
 No na values in the data set
+
+# Feature Engineering
+
+## Time features
+
+### Month and Year combinations
+```{r}
+# Create a new column for month-year
+data$MonthYear <- format(data$Date, "%Y-%m")
+data$Month <- format(data$Date, "%m")
+data$Year <- format(data$Date, "%Y")
+head(data)
+```
+
+### seasons and year 
+```{r}
+# Create a new column for month-year
+data$Season <- quarter(data$Date , with_year = FALSE)
+data$SeasonYear <- quarter(data$Date , with_year = TRUE)
+```
+
+### week and year
+```{r}
+# Create weekly variable
+data$Week <- week(data$Date)
+
+# Combine year and week 
+data$WeekYear <- paste0(format(data$Date, "%Y"), "-", sprintf("%02d", data$Week))
+
+# Find the minimum year in the dataset
+min_year <- min(data$Year)
+
+# Create a new column 'year_number' that maps each year to a sequential number starting from 1
+data$year_number <- (as.numeric(data$Year) - as.numeric(min_year)) + 1
+
+# Create a new weeknumber variable that combines year and week
+data$weeknumber <- data$year_number * data$Week
+
+# If you want weeknumber as a numeric value, you can convert it
+data$weeknumber <- as.numeric(data$weeknumber)
+
+```
+
 Next I will perform univariate analysis
 
 ### Exploration of Amount
@@ -425,19 +474,8 @@ The chart shows the amount of Income and Expense and Transfer-Out over time.
 - Expense is generally smaller amount and more regular
 
 ### Monthly Sum of Amount comparing Income.Expense
-```{r}
-# Create a new column for month-year
-data$MonthYear <- format(data$Date, "%Y-%m")
-data$Month <- format(data$Date, "%m")
-data$Year <- format(data$Date, "%Y")
-head(data)
-```
 
 ```{r} 
-# Create a new column for month-year
-data$MonthYear <- format(data$Date, "%Y-%m")
-data$Month <- format(data$Date, "%m")
-data$Year <- format(data$Date, "%Y")
 
 # Count the number of income transactions per month
 income_freq <- data %>%
@@ -461,9 +499,6 @@ Expense has a less uniform line
 
 ### Quarterly Sum of Amount comparing Income.Expense
 ```{r} 
-# Create a new column for month-year
-data$Season <- quarter(data$Date , with_year = FALSE)
-data$SeasonYear <- quarter(data$Date , with_year = TRUE)
 
 # Count the number of income transactions per month
 season_income_freq <- data %>%
@@ -487,11 +522,7 @@ Expense has a less uniform line
 
 ### Weekly Sum of Amount comparing Income.Expense acorss years
 ```{r} 
-# Create weekly variable
-data$Week <- week(data$Date)
 
-# Combine year and week 
-data$WeekYear <- paste0(format(data$Date, "%Y"), "-", sprintf("%02d", data$Week))
 
 # Count the number of income transactions per week
 week_income_freq <- data %>%
@@ -731,6 +762,7 @@ income_salary_freq <- data %>%
   group_by(Month, Year) %>%
   summarise(TotalAmount = sum(Amount))
 
+print(income_salary_freq)
 
 ggplot(income_salary_freq, aes(x = Month, y = TotalAmount, color = factor(Year), group = factor(Year))) +
   geom_point() + 
@@ -745,16 +777,16 @@ ggplot(income_salary_freq, aes(x = Month, y = TotalAmount, color = factor(Year),
 
 #### Chart analysis 
 
-### Timeseries of Amount of salary acorss years
+### Timeseries of Amount of expense acorss years
 ```{r}
 
-income_salary_freq <- data %>%
+expense_freq <- data %>%
   filter(Income.Expense == "Expense") %>%
   group_by(Month, Year) %>%
   summarise(TotalAmount = sum(Amount))
 
 
-ggplot(income_salary_freq, aes(x = Month, y = TotalAmount, color = factor(Year), group = factor(Year))) +
+ggplot(expense_freq, aes(x = Month, y = TotalAmount, color = factor(Year), group = factor(Year))) +
   geom_point() + 
   geom_line() + 
   facet_wrap(~ Year, ncol = 1) +
@@ -765,7 +797,7 @@ ggplot(income_salary_freq, aes(x = Month, y = TotalAmount, color = factor(Year),
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-### Timeseries of Amount Aalary comparing acorss subcategories
+### Timeseries of Amount Salary comparing acorss subcategories - No Chart
 ```{r}
 salary_subcategory_freq <- data %>%
   filter(Category == "Salary") %>%
@@ -823,3 +855,198 @@ ggplot(expense_catergoy_freq, aes(x = Category, y = TotalAmount, fill = Subcateg
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
+# Expense Prediction Model
+
+## TSLM weekly expense model
+
+### Expense Data Preperation 
+Createing a weekly expense dataframe
+```{r}
+weekly_expense <- data %>%
+  filter(Income.Expense == "Expense") %>%
+  group_by(weeknumber) %>%
+  summarise(
+    Total_Expense = sum(Amount),
+    year_number,
+    weeknumber,
+    Season,
+    Month,
+    Year, 
+    Week, 
+    Date,
+    Total_Expense
+    )
+```
+
+### Weekly expense time seires
+```{r}
+  # Determine the start year and month
+start_year <- min(weekly_expense$year_number)
+start_week <- min(weekly_expense$weeknumber)
+
+    # Convert to time series object
+weekly_expense_ts <- ts(weekly_expense$Total_Expense, start = c(start_year, start_month), frequency = 52)
+```
+
+### Create Time series model
+```{r}
+
+# Fit tslm model with additional features
+weekly_model <- tslm(weekly_expense_ts ~ trend +  year_number+
+    weeknumber+
+    Season+
+    Month+
+    Year+
+    Week , data=weekly_expense)
+summary(weekly_model)
+```
+
+### Results
+```{r}
+# Calculate MAE and RMSE
+actual_values <- weekly_expense$Total_Expense
+predicted_values <- fitted(weekly_model)
+mae <- mean(abs(actual_values - predicted_values))
+rmse <- sqrt(mean((actual_values - predicted_values)^2))
+list(MAE = mae, RMSE = rmse)
+```
+
+### Plot Actual vs Predicted
+```{r}
+# Create a data frame for actual vs predicted values
+comparison_df <- data.frame(
+  Week = 1:length(actual_values),
+  Actual = actual_values,
+  Predicted = predicted_values
+)
+
+# Plot actual vs predicted values
+ggplot(comparison_df, aes(x = Week)) +
+  geom_line(aes(y = Actual, color = "Actual")) +
+  geom_line(aes(y = Predicted, color = "Predicted")) +
+  labs(title = "Actual vs Predicted Monthly Expenses",
+       x = "Month",
+       y = "Expense (INR)",
+       color = "Legend") +
+  theme_minimal()
+```
+
+## simplified TSLM weekly expense model
+```{r}
+# Fit a simplified tslm model
+simplified_model <- tslm(weekly_expense_ts ~ Season + Month + Week, data = weekly_expense)
+
+# Summary of the simplified model
+summary(simplified_model)
+
+```
+
+### Simplified Results
+```{r}
+
+# Calculate MAE and RMSE
+actual_values <- weekly_expense$Total_Expense
+predicted_values <- fitted(simplified_model)
+mae <- mean(abs(actual_values - predicted_values))
+rmse <- sqrt(mean((actual_values - predicted_values)^2))
+list(MAE = mae, RMSE = rmse)
+```
+
+### Plot Simplified Actual vs Simplified Predicted
+```{r}
+# Create a data frame for actual vs predicted values
+comparison_df <- data.frame(
+  Week = 1:length(actual_values),
+  Actual = actual_values,
+  Predicted = predicted_values
+)
+
+# Plot actual vs predicted values
+ggplot(comparison_df, aes(x = Week)) +
+  geom_line(aes(y = Actual, color = "Actual")) +
+  geom_line(aes(y = Predicted, color = "Predicted")) +
+  labs(title = "Actual vs Predicted Monthly Expenses",
+       x = "Month",
+       y = "Expense (INR)",
+       color = "Legend") +
+  theme_minimal()
+```
+
+
+## ARIMA model 
+```{r}
+# Assuming weekly_expense_ts is your time series data
+# Fit an ARIMA model
+arima_model <- auto.arima(weekly_expense_ts)
+
+# Print the summary of the model
+summary(arima_model)
+
+# Optionally, you can plot the forecast
+forecasted_values <- forecast(arima_model, h = 52)  # Forecasting 10 periods ahead
+plot(forecasted_values)
+```
+
+
+## Multi Linear Regression with One Hot encoding
+
+### encoding data
+```{r}
+encoding_catergoris <-  data %>%
+  summarise(
+    Mode,
+    Category,
+    Subcategory, 
+    Year, 
+    Month,
+    MonthYear,
+    Season, 
+    SeasonYear,
+    Week, 
+    WeekYear
+    )
+
+#define one-hot encoding function
+dummy <- dummyVars(" ~ .", data=encoding_catergoris)
+
+#perform one-hot encoding on data frame
+encoded_data <- data.frame(predict(dummy, newdata=encoding_catergoris))
+
+```
+
+```{r}
+#view final data frame
+str(encoded_data)
+```
+
+```{r}
+# combine encoded with original dataframe
+combined_data <- bind_cols(data, encoded_data)
+str(combined_data)
+categorical_encoded_expense_data <- combined_data %>%
+ filter(Income.Expense == "Expense") %>%
+  select(
+    -Income.Expense,
+    -Date, 
+    -Mode, 
+    -Category,
+    -Subcategory, 
+    -Year, 
+    -Note,
+    -Currency,
+   -Month,
+    -MonthYear,
+    -WeekYear, 
+    -Season...12, 
+    -SeasonYear...13, 
+    -Week...14,
+    -SeasonYear...272,
+     -Week...273, 
+     -year_number, 
+     -weeknumber   )
+```
+
+### complex model
+```{r}
+
+```
