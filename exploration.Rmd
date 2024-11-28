@@ -857,24 +857,77 @@ ggplot(expense_catergoy_freq, aes(x = Category, y = TotalAmount, fill = Subcateg
 
 # Expense Prediction Model
 
+### check for outliers
+```{r}
+data %>%
+#  filter(Income.Expense == "Expense") %>%
+ ggplot( aes(x = Income.Expense, y = Amount)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Values by Group",
+       x = "Group",
+       y = "Value") +
+  theme_minimal()
+
+```
+
+```{r}
+expense_data <- data %>%
+  filter(Income.Expense == "Expense")
+
+Q1 <- quantile(expense_data$Amount, 0.25)
+Q3 <- quantile(expense_data$Amount, 0.75)
+IQR_value <- Q3 - Q1
+
+lower_bound <- Q1 - 1.5 * IQR_value
+upper_bound <- Q3 + 1.5 * IQR_value
+
+cleaned_data <- expense_data %>%
+  filter(Amount >= lower_bound & Amount <= upper_bound)
+
+# Plot the cleaned data
+ggplot(cleaned_data, aes(x = Income.Expense, y = Amount)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Values by Group (Outliers Removed)",
+       x = "Group",
+       y = "Value") +
+  theme_minimal()
+```
+
+```{r}
+hist(cleaned_data$Amount)
+```
+
+```{r}
+cleaned_data$Amount_log <- log(cleaned_data$Amount)
+hist(cleaned_data$Amount_log)
+```
+
+```{r}
+# Plot the cleaned data
+ggplot(cleaned_data, aes(x = Income.Expense, y = Amount_log)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Values by Group (Outliers Removed)",
+       x = "Group",
+       y = "Value") +
+  theme_minimal()
+```
+
 ## TSLM weekly expense model
 
 ### Expense Data Preperation 
 Createing a weekly expense dataframe
 ```{r}
-weekly_expense <- data %>%
-  filter(Income.Expense == "Expense") %>%
+weekly_expense <- cleaned_data %>%
   group_by(weeknumber) %>%
   summarise(
-    Total_Expense = sum(Amount),
+    Total_Expense = sum(Amount_log),
     year_number,
     weeknumber,
     Season,
     Month,
     Year, 
     Week, 
-    Date,
-    Total_Expense
+    Date
     )
 ```
 
@@ -885,7 +938,7 @@ start_year <- min(weekly_expense$year_number)
 start_week <- min(weekly_expense$weeknumber)
 
     # Convert to time series object
-weekly_expense_ts <- ts(weekly_expense$Total_Expense, start = c(start_year, start_month), frequency = 52)
+weekly_expense_ts <- ts(weekly_expense$Total_Expense, start = c(start_year, start_week), frequency = 52)
 ```
 
 ### Create Time series model
@@ -901,34 +954,25 @@ weekly_model <- tslm(weekly_expense_ts ~ trend +  year_number+
 summary(weekly_model)
 ```
 
-### Results
-```{r}
-# Calculate MAE and RMSE
-actual_values <- weekly_expense$Total_Expense
-predicted_values <- fitted(weekly_model)
-mae <- mean(abs(actual_values - predicted_values))
-rmse <- sqrt(mean((actual_values - predicted_values)^2))
-list(MAE = mae, RMSE = rmse)
-```
 
 ### Plot Actual vs Predicted
 ```{r}
 # Create a data frame for actual vs predicted values
 comparison_df <- data.frame(
-  Week = 1:length(actual_values),
-  Actual = actual_values,
-  Predicted = predicted_values
+  Week = 1:length(weekly_expense$Total_Expense),
+  Actual = weekly_expense$Total_Expense,
+  Predicted = fitted(weekly_model),
+  Year = weekly_expense$Year
 )
 
 # Plot actual vs predicted values
 ggplot(comparison_df, aes(x = Week)) +
   geom_line(aes(y = Actual, color = "Actual")) +
   geom_line(aes(y = Predicted, color = "Predicted")) +
+  facet_wrap(~ Year, ncol = 1) +
   labs(title = "Actual vs Predicted Monthly Expenses",
-       x = "Month",
-       y = "Expense (INR)",
-       color = "Legend") +
-  theme_minimal()
+       x = "Week",
+       y = "total Amount") 
 ```
 
 ## simplified TSLM weekly expense model
@@ -941,58 +985,47 @@ summary(simplified_model)
 
 ```
 
-### Simplified Results
-```{r}
-
-# Calculate MAE and RMSE
-actual_values <- weekly_expense$Total_Expense
-predicted_values <- fitted(simplified_model)
-mae <- mean(abs(actual_values - predicted_values))
-rmse <- sqrt(mean((actual_values - predicted_values)^2))
-list(MAE = mae, RMSE = rmse)
-```
-
 ### Plot Simplified Actual vs Simplified Predicted
 ```{r}
 # Create a data frame for actual vs predicted values
 comparison_df <- data.frame(
-  Week = 1:length(actual_values),
-  Actual = actual_values,
-  Predicted = predicted_values
+  Week = 1:length(weekly_expense$Total_Expense),
+  Actual = weekly_expense$Total_Expense,
+  Predicted = fitted(simplified_model),
+  Year = weekly_expense$Year
 )
 
 # Plot actual vs predicted values
 ggplot(comparison_df, aes(x = Week)) +
   geom_line(aes(y = Actual, color = "Actual")) +
   geom_line(aes(y = Predicted, color = "Predicted")) +
-  labs(title = "Actual vs Predicted Monthly Expenses",
-       x = "Month",
-       y = "Expense (INR)",
-       color = "Legend") +
-  theme_minimal()
+  facet_wrap(~ Year, ncol = 1) +
+  labs(title = "Simplified Model Actual vs Predicted Monthly Expenses",
+       x = "Week",
+       y = "total Amount") 
 ```
 
 
 ## ARIMA model 
 ```{r}
-# Assuming weekly_expense_ts is your time series data
-# Fit an ARIMA model
+
 arima_model <- auto.arima(weekly_expense_ts)
 
-# Print the summary of the model
 summary(arima_model)
 
-# Optionally, you can plot the forecast
-forecasted_values <- forecast(arima_model, h = 52)  # Forecasting 10 periods ahead
+```
+
+```{r}
+forecasted_values <- forecast(arima_model, h = 52)  
 plot(forecasted_values)
 ```
 
-
 ## Multi Linear Regression with One Hot encoding
+
 
 ### encoding data
 ```{r}
-encoding_catergoris <-  data %>%
+encoding_catergoris <-  cleaned_data %>%
   summarise(
     Mode,
     Category,
@@ -1021,10 +1054,11 @@ str(encoded_data)
 
 ```{r}
 # combine encoded with original dataframe
-combined_data <- bind_cols(data, encoded_data)
+combined_data <- bind_cols(cleaned_data, encoded_data)
+
+
 str(combined_data)
 categorical_encoded_expense_data <- combined_data %>%
- filter(Income.Expense == "Expense") %>%
   select(
     -Income.Expense,
     -Date, 
@@ -1039,9 +1073,7 @@ categorical_encoded_expense_data <- combined_data %>%
     -WeekYear, 
     -Season...12, 
     -SeasonYear...13, 
-    -Week...14,
-    -SeasonYear...272,
-     -Week...273, 
+    -Week...14, SeasonYear...238, Week...239, 
      -year_number, 
      -weeknumber   )
 ```
@@ -1049,4 +1081,73 @@ categorical_encoded_expense_data <- combined_data %>%
 ### complex model
 ```{r}
 
+# Ensure the target variable is numeric
+
+# Split the data
+set.seed(123)  # For reproducibility
+train_indices <- sample(seq_len(nrow(categorical_encoded_expense_data)), size = 0.8 * nrow(categorical_encoded_expense_data))
+train_data <- categorical_encoded_expense_data[train_indices, ]
+test_data <- categorical_encoded_expense_data[-train_indices, ]
+
+source_data <- cleaned_data[-train_indices, ]
+
+# Build the model
+model <- lm(Amount_log ~ ., data = train_data)
+
+# summary(model)
 ```
+
+```{r}
+# Make predictions
+predictions <- predict(model, newdata = test_data)
+```
+
+```{r}
+# Make predictions
+# predictions <- predict(model, newdata = test_data)
+
+# Calculate performance metrics
+# mse <- mean((test_data$Amount - predictions)^2)
+# rmse <- sqrt(mse)
+# mae <- mean(abs(test_data$Amount - predictions))
+# r_squared <- summary(model)$r.squared
+
+# list(MSE = mse, RMSE = rmse, MAE = mae, R_squared = r_squared)
+
+# Create a data frame for actual vs predicted values
+comparison_df <- data.frame(
+  Actual = test_data$Amount_log,
+  Predicted = predictions,
+  Week=source_data$Week,
+  Year=source_data$Year
+)
+
+
+
+# Coefficients of the model
+# coef(model)
+```
+
+```{r}
+
+ggplot(comparison_df, aes(x = Actual, y = Predicted)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, color = "red") +
+  labs(title = "Actual vs Predicted Expenses",
+       x = "Actual Expenses",
+       y = "Predicted Expenses")
+
+```
+
+### 
+```{r}
+ggplot(comparison_df, aes(x = Week)) +
+  geom_line(aes(y = Actual, color = "Actual")) +
+  geom_line(aes(y = Predicted, color = "Predicted")) +
+  facet_wrap(~ Year, ncol = 1) +
+  labs(title = "Actual vs Predicted Expenses",
+       x = "Actual Expenses",
+       y = "Predicted Expenses")
+```
+
+<!-- plot residuals  -->
