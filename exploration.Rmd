@@ -15,6 +15,10 @@ if (!requireNamespace("treemap", quietly = TRUE)) {
 if (!requireNamespace("waffle", quietly = TRUE)) {
   install.packages("waffle")
 }
+
+if (!requireNamespace("caret", quietly = TRUE)) {
+  install.packages("caret")
+}
 ```
 
 # Setup
@@ -36,6 +40,8 @@ library(caret)
 data <- read.csv("./Daily_Household_Transactions.csv")
 
 head(data)
+str(data)
+summary(data)
 ```
 
 ```{r}
@@ -60,7 +66,6 @@ data$Category <- as.factor(data$Category)
 data$Subcategory <- as.factor(data$Subcategory)
 data$Income.Expense <- as.factor(data$Income.Expense)
 
-# Mutate the Subcategory column to fill empty strings with Category + " unknown"
 data <- data %>%
   mutate(Subcategory = ifelse(Subcategory == "", paste(Category, "unknown"), paste(Subcategory)))
 
@@ -174,30 +179,19 @@ ggplot(income_expense_count, aes(x = Income.Expense, y = Count, fill = Income.Ex
 
 ```
 ```{r}
-# stacked_bar_plot <- data %>%
-#   group_by(Income.Expense, Category) %>%
-#   summarise(Count = n()) %>%
-#   ggplot(aes(x = Income.Expense, y = Count, fill = Category, col="black")) +
-#   geom_col() +
-#   labs(title = "Stacked Bar Plot of Transactions per Income/Expense and Category",
-#        x = "Income/Expense",
-#        y = "Number of Transactions") +
-#   theme(axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels to 45 degrees
-#         plot.title = element_text(hjust = 0.5))
+stacked_bar_plot <- data %>%
+  group_by(Income.Expense) %>%
+  summarise(Amount = sum(Amount)) %>%
+  ggplot(aes(x = Income.Expense, y = Amount, fill = Income.Expense)) +
+  geom_col() +
+  labs(title = "Bar Plot of total Amount per Income/Expense ",
+       x = "Income/Expense",
+       y = "Number of Transactions") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels to 45 degrees
+        plot.title = element_text(hjust = 0.5))
 
-# stacked_bar_plot
-# Create faceted bar plots by Year
-# facet_bar_plot <- data %>%
-#   ggplot(aes(x = Income.Expense, fill = Income.Expense)) +
-#   geom_bar() +
-#   facet_wrap(~ Year, ncol = 1) +
-#   labs(title = "Faceted Bar Plot of Transactions per Income/Expense by Year",
-#        x = "Income/Expense",
-#        y = "Number of Transactions") +
-#   theme(axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels to 45 degrees
-#         plot.title = element_text(hjust = 0.5))
+stacked_bar_plot
 
-# facet_bar_plot
 
 ```
 #### Chart analysis
@@ -243,6 +237,22 @@ ggplot(mode_expense_count, aes(x = Mode, y = Count, fill = Mode)) +
 ```
 #### Chart analysis
 Chart shows there are two main Modes of transaction. Savings bank account 1, and Savings bank account 2, follewed by Credit Card
+
+```{r}
+mode_expense_count <- data %>%
+  group_by(Mode) %>%
+  summarise(Total = sum(Amount))
+
+ggplot(mode_expense_count, aes(x = Mode, y = Total, fill = Mode)) +
+  geom_col() +
+  labs(title = "Number of Transactions per Mode Category",
+       x = "Mode",
+       y = "Number of Transactions") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+```
+#### Chart analysis
+Chart shows there are two main Modes of transaction. Savings bank account 1, and Savings bank account 2, follewed by Credit Card
+
 
 ## Subcategory
 
@@ -679,7 +689,7 @@ category_amount_summary <- data %>%
 expenseCategoryAmount <- ggplot(category_amount_summary %>%
   filter(Income.Expense == "Expense"), aes(x = Category, y = Total_Amount, fill = Category)) +
   geom_col() +
-  labs(title = "Chart X", subtitle = "Expenses Total Amount per Category",
+  labs(title = "Expense", subtitle = "Expenses Total Amount per Category",
        x = "Category",
        y = "Total Amount") +
   theme(
@@ -690,7 +700,7 @@ expenseCategoryAmount <- ggplot(category_amount_summary %>%
 incomeCategoryAmount <- ggplot(category_amount_summary %>%
   filter(Income.Expense == "Income"), aes(x = Category, y = Total_Amount, fill = Category)) +
   geom_col() +
-  labs(title = "Chart X", subtitle = "Income Total Amount per Category",
+  labs(title = "Income", subtitle = "Income Total Amount per Category",
        x = "Category",
        y = "Total Amount") +
   theme(
@@ -701,7 +711,7 @@ incomeCategoryAmount <- ggplot(category_amount_summary %>%
 transferOutCategoryAmount <- ggplot(category_amount_summary %>%
   filter(Income.Expense == "Transfer-Out"), aes(x = Category, y = Total_Amount, fill = Category)) +
   geom_col() +
-  labs(title = "Chart X", subtitle = "Transfer-Out Total Amount per Category",
+  labs(title = "Transfer-Out", subtitle = "Transfer-Out Total Amount per Category",
        x = "Category",
        y = "Total Amount") +
   theme(
@@ -774,6 +784,7 @@ ggplot(income_salary_freq, aes(x = Month, y = TotalAmount, color = factor(Year),
        color = "Year") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
+
 
 #### Chart analysis 
 
@@ -857,7 +868,7 @@ ggplot(expense_catergoy_freq, aes(x = Category, y = TotalAmount, fill = Subcateg
 
 # Expense Prediction Model
 
-### check for outliers
+## clean Expense data
 ```{r}
 data %>%
 #  filter(Income.Expense == "Expense") %>%
@@ -889,8 +900,7 @@ ggplot(cleaned_data, aes(x = Income.Expense, y = Amount)) +
   geom_boxplot() +
   labs(title = "Boxplot of Values by Group (Outliers Removed)",
        x = "Group",
-       y = "Value") +
-  theme_minimal()
+       y = "Value") 
 ```
 
 ```{r}
@@ -1006,7 +1016,8 @@ ggplot(comparison_df, aes(x = Week)) +
 ```
 
 
-## ARIMA model 
+## ARIMA Expense model 
+### attempt 1
 ```{r}
 
 arima_model <- auto.arima(weekly_expense_ts)
@@ -1020,6 +1031,58 @@ forecasted_values <- forecast(arima_model, h = 52)
 plot(forecasted_values)
 ```
 
+### attempt 2
+```{r}
+
+arima_model_2 <- auto.arima(weekly_expense_ts, seasonal = FALSE)
+
+summary(arima_model_2)
+
+```
+
+```{r}
+forecasted_values_2 <- forecast(arima_model_2, h = 52)  
+plot(forecasted_values_2)
+```
+
+### attempt 3
+
+```{r}
+
+arima_model_3 <- auto.arima(weekly_expense_ts, seasonal = FALSE, stepwise=FALSE, approximation=FALSE)
+
+summary(arima_model_3)
+
+```
+
+```{r}
+forecasted_values_3 <- forecast(arima_model_3, h = 52)  
+plot(forecasted_values_3)
+```
+
+
+
+### attempt 4
+
+```{r}
+ggAcf(weekly_expense_ts)
+```
+
+```{r}
+ggPacf(weekly_expense_ts)
+```
+```{r}
+
+arima_model_4 <-Arima(weekly_expense_ts, order=c(0, 1, 3))
+
+summary(arima_model_4)
+
+```
+
+```{r}
+forecasted_values_4 <- forecast(arima_model_4, h = 52)  
+plot(forecasted_values_4)
+```
 ## Multi Linear Regression with One Hot encoding
 
 
@@ -1071,14 +1134,12 @@ categorical_encoded_expense_data <- combined_data %>%
    -Month,
     -MonthYear,
     -WeekYear, 
-    -Season...12, 
-    -SeasonYear...13, 
-    -Week...14, SeasonYear...238, Week...239, 
+
      -year_number, 
      -weeknumber   )
 ```
 
-### complex model
+### model
 ```{r}
 
 # Ensure the target variable is numeric
@@ -1094,8 +1155,10 @@ source_data <- cleaned_data[-train_indices, ]
 # Build the model
 model <- lm(Amount_log ~ ., data = train_data)
 
-# summary(model)
+summary(model)
 ```
+Many if the Coefficients have a high p-value, so later on I will remove these
+
 
 ```{r}
 # Make predictions
@@ -1103,16 +1166,6 @@ predictions <- predict(model, newdata = test_data)
 ```
 
 ```{r}
-# Make predictions
-# predictions <- predict(model, newdata = test_data)
-
-# Calculate performance metrics
-# mse <- mean((test_data$Amount - predictions)^2)
-# rmse <- sqrt(mse)
-# mae <- mean(abs(test_data$Amount - predictions))
-# r_squared <- summary(model)$r.squared
-
-# list(MSE = mse, RMSE = rmse, MAE = mae, R_squared = r_squared)
 
 # Create a data frame for actual vs predicted values
 comparison_df <- data.frame(
@@ -1122,10 +1175,8 @@ comparison_df <- data.frame(
   Year=source_data$Year
 )
 
-
-
 # Coefficients of the model
-# coef(model)
+coef(model)
 ```
 
 ```{r}
@@ -1151,3 +1202,264 @@ ggplot(comparison_df, aes(x = Week)) +
 ```
 
 <!-- plot residuals  -->
+```{r}
+plot(model, which = 1)
+```
+
+```{r}
+plot(model, which = 2)
+```
+
+### simplified linear model
+```{r}
+# Step 1: Extract the p-values
+p_values <- summary(model)$coefficients[, "Pr(>|t|)"]
+
+# Step 2: Identify insignificant features
+# Let's use a threshold of 0.05
+insignificant_features <- names(p_values[p_values <= 0.05])
+
+# Step 3: Remove insignificant features and create a new model
+# First, create a formula excluding the insignificant features
+formula <- as.formula(paste("Amount_log ~ ", paste(insignificant_features, collapse = " + ")))
+
+# Build the new model
+new_model <- lm(formula, data = train_data)
+
+# Summary of the new model
+summary(new_model)
+```
+New model has better coefficients
+
+```{r}
+# Make predictions
+new_predictions <- predict(new_model, newdata = test_data)
+```
+
+```{r}
+# Make predictions
+# predictions <- predict(model, newdata = test_data)
+
+# Calculate performance metrics
+# mse <- mean((test_data$Amount - predictions)^2)
+# rmse <- sqrt(mse)
+# mae <- mean(abs(test_data$Amount - predictions))
+# r_squared <- summary(model)$r.squared
+
+# list(MSE = mse, RMSE = rmse, MAE = mae, R_squared = r_squared)
+
+# Create a data frame for actual vs predicted values
+comparison_df <- data.frame(
+  Actual = test_data$Amount_log,
+  Predicted = new_predictions,
+  Week=source_data$Week,
+  Year=source_data$Year
+)
+
+# Coefficients of the model
+coef(new_model)
+```
+
+```{r}
+
+comparison_df$Color <- ifelse(comparison_df$Actual > comparison_df$Predicted, "blue", "green")
+
+ggplot(comparison_df, aes(x = Actual, y = Predicted)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, color = "red") +
+  labs(title = "Actual vs Predicted Expenses",
+       x = "Actual Expenses",
+       y = "Predicted Expenses")
+
+```
+
+### 
+```{r}
+ggplot(comparison_df, aes(x = Week)) +
+  geom_line(aes(y = Actual, color = "Actual")) +
+  geom_line(aes(y = Predicted, color = "Predicted")) +
+  facet_wrap(~ Year, ncol = 1) +
+  labs(title = "Actual vs Predicted Expenses",
+       x = "Actual Expenses",
+       y = "Predicted Expenses")
+```
+
+<!-- plot residuals  -->
+```{r}
+plot(new_model, which = 1)
+```
+
+```{r}
+plot(new_model, which = 2)
+```
+
+
+# Income Salary Prediction Model
+
+## clean Income data
+```{r}
+income_salary_data <- data %>%
+  filter(Income.Expense == "Income" & Category == "Salary")
+
+Q1 <- quantile(income_salary_data$Amount, 0.25)
+Q3 <- quantile(income_salary_data$Amount, 0.75)
+IQR_value <- Q3 - Q1
+
+lower_bound <- Q1 - 1.5 * IQR_value
+upper_bound <- Q3 + 1.5 * IQR_value
+
+cleaned_salary_data <- income_salary_data %>%
+  filter(Amount >= lower_bound & Amount <= upper_bound)
+
+# Plot the cleaned data
+ggplot(cleaned_salary_data, aes(x = Income.Expense, y = Amount)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Salary Income Amount",
+       x = "Group",
+       y = "Value") +
+  theme_minimal()
+```
+
+```{r}
+hist(cleaned_salary_data$Amount)
+```
+
+```{r}
+cleaned_salary_data$Amount_log <- log(cleaned_salary_data$Amount)
+hist(cleaned_salary_data$Amount_log)
+```
+
+```{r}
+# Plot the cleaned data
+ggplot(cleaned_salary_data, aes(x = Income.Expense, y = Amount_log)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Values by Group (Outliers Removed)",
+       x = "Group",
+       y = "Value") +
+  theme_minimal()
+```
+
+## TSLM Monthly Income Salary  model
+
+### Income Salary  Data Preperation 
+Createing a weekly expense dataframe
+```{r}
+monthly_salay_income <- cleaned_salary_data %>%
+  group_by(MonthYear) %>%
+  summarise(
+    Total_Income = sum(Amount_log),
+    year_number,
+    weeknumber,
+    Season,
+    Month,
+    Year, 
+    Week, 
+    Date
+    )
+```
+
+### Monthly Income Salary  time seires
+```{r}
+  # Determine the start year and month
+start_year <- min(monthly_salay_income$Year)
+start_week <- min(monthly_salay_income$Month)
+
+monthly_salay_income_ts <- ts(monthly_salay_income$Total_Income, start = c(start_year, start_week), frequency = 12)
+```
+
+### Create Time series model
+```{r}
+
+# Fit tslm model with additional features
+monthly_salay_income_model <- tslm(monthly_salay_income_ts ~ trend +  year_number+
+    weeknumber+
+    Season+
+    Month+
+    Year+
+    Week , data=monthly_salay_income)
+summary(monthly_salay_income_model)
+```
+
+
+### Plot Actual vs Predicted
+```{r}
+# Create a data frame for actual vs predicted values
+comparison_df <- data.frame(
+  Month = 1:length(monthly_salay_income$Total_Income),
+  Actual = monthly_salay_income$Total_Income,
+  Predicted = fitted(monthly_salay_income_model),
+  Year = monthly_salay_income$Year
+)
+
+# Plot actual vs predicted values
+ggplot(comparison_df, aes(x = Month)) +
+  geom_line(aes(y = Actual, color = "Actual")) +
+  geom_line(aes(y = Predicted, color = "Predicted")) +
+  facet_wrap(~ Year, ncol = 1) +
+  labs(title = "Actual vs Predicted Monthly Expenses",
+       x = "Week",
+       y = "total Amount") 
+```
+
+## simplified TSLM monthly Income Salary  model
+```{r}
+# Fit a simplified tslm model
+simplified_model <- tslm(monthly_salay_income_ts ~ trend + year_number+
+    Season+
+    Month+
+    Week , data=monthly_salay_income)
+
+# Summary of the simplified model
+summary(simplified_model)
+
+```
+
+### Plot Simplified Actual vs Simplified Predicted
+```{r}
+# Create a data frame for actual vs predicted values
+comparison_df <- data.frame(
+  Month = 1:length(monthly_salay_income$Total_Income),
+  Actual = monthly_salay_income$Total_Income,
+  Predicted = fitted(simplified_model),
+  Year = monthly_salay_income$Year
+)
+
+# Plot actual vs predicted values
+ggplot(comparison_df, aes(x = Month)) +
+  geom_line(aes(y = Actual, color = "Actual")) +
+  geom_line(aes(y = Predicted, color = "Predicted")) +
+  facet_wrap(~ Year, ncol = 1) +
+  labs(title = "Simplified Model Actual vs Predicted Monthly Expenses",
+       x = "Week",
+       y = "total Amount") 
+```
+
+
+## ARIMA Income Salary  model 
+### attempt 1
+```{r}
+
+income_salary_arima_model <- auto.arima(monthly_salay_income_ts)
+
+summary(income_salary_arima_model)
+
+```
+
+```{r}
+forecasted_income_salary <- forecast(income_salary_arima_model, h = 52)  
+plot(forecasted_income_salary)
+```
+
+### attempt 2
+```{r}
+
+arima_model_2 <- auto.arima(weekly_expense_ts, seasonal = FALSE)
+
+summary(arima_model_2)
+
+```
+
+```{r}
+forecasted_values_2 <- forecast(arima_model, h = 52)  
+plot(forecasted_values_2)
+```
